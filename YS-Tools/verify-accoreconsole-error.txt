@@ -1,0 +1,2 @@
+LOAD_ERROR=Óï·¨´íÎó
+bound=NO

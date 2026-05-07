@@ -1,0 +1,14 @@
+=== accoreconsole inline verify ===
+ACADVER=22.0s (LMS Tech)
+YS_TOOLS_PATH=E:/366256/vibecoding/CADTools/YS-Tools
+load main=E:/366256/vibecoding/CADTools/YS-Tools/YS-Tools.lsp
+bound *YS-Tools-Path*=NO
+C:YS=FAIL
+C:YSOOLS=FAIL
+C:YSTOOLS=FAIL
+C:Y=FAIL
+C:RR=FAIL
+C:TXT=FAIL
+C:PAI=FAIL
+C:HAO=FAIL
+C:DIAGFRAME=FAIL

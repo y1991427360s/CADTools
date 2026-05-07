@@ -1,0 +1,10 @@
+(setq __f (open (strcat (getvar "DWGPREFIX") "ys-test-log.txt") "w"))
+(write-line "TEST START" __f)
+(write-line (strcat "DWGPREFIX: " (getvar "DWGPREFIX")) __f)
+(write-line (strcat "ACADVER: " (getvar "ACADVER")) __f)
+(setq __fp (findfile "YS-Tools\\test-simple.lsp"))
+(write-line (strcat "Find test file: " (if __fp __fp "NOT FOUND")) __f)
+(close __f)
+(if __fp (load __fp))
+quit
+Y

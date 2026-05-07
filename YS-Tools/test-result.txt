@@ -1,0 +1,4 @@
+=== YS-Tools Load Test ===
+Date: 20260430.143147
+
+FAIL: *YS-Tools-Path* is not set!
