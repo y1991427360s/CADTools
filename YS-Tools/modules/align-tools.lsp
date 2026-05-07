@@ -1,300 +1,56 @@
-;;; ====================================================================
-;;; YS-Tools - ????????? (??3??ê?????)
-;;; ????: ZUO(?????) YOU(?????) SHANG(?????) XIA(?????) ZHONG(????)
-;;; ====================================================================
+;;; YS-Tools module compatibility loader
+;;; Encoding: GBK/ANSI, CRLF
 
-(defun c:ZHONG (/ *error* ss doc undo-open i ename ed pt top-ename top-pt base-x changed skipped)
-  (vl-load-com)
-  (setq doc       (vla-get-activedocument (vlax-get-acad-object))
-        undo-open nil
-        top-ename nil
-        top-pt    nil
-        changed   0
-        skipped   0)
-  (defun *error* (msg)
-    (if undo-open
-      (vl-catch-all-apply 'vla-endundomark (list doc))
-    )
-    (if (and msg
-             (/= msg "Function cancelled")
-             (/= msg "quit / exit abort"))
-      (princ (strcat "\n[ZHONG] Error: " msg))
-    )
-    (princ)
+(defun ysmod:root (/ p)
+  (cond
+    ((and (boundp '*YS-Tools-Path*) *YS-Tools-Path*) *YS-Tools-Path*)
+    ((findfile "YS-Tools\\YS-Tools.lsp") (vl-filename-directory (findfile "YS-Tools\\YS-Tools.lsp")))
+    ((findfile "YS-Tools.lsp") (vl-filename-directory (findfile "YS-Tools.lsp")))
+    (T nil)
   )
-  (princ "\n[ZHONG] ???????ж????????...")
-  (if (setq ss (ssget '((0 . "TEXT,MTEXT"))))
-    (progn
-      (setq i 0)
-      (repeat (sslength ss)
-        (setq ename (ssname ss i)
-              ed    (entget ename)
-              pt    (aa:text-anchor-point ed))
-        (if pt
-          (if (or (null top-pt)
-                  (> (cadr pt) (cadr top-pt)))
-            (setq top-ename ename
-                  top-pt    pt))
-          (setq skipped (1+ skipped))
-        )
-        (setq i (1+ i))
-      )
-      (if top-pt
-        (progn
-          (setq base-x (car top-pt))
-          (vla-startundomark doc)
-          (setq undo-open T
-                i         0)
-          (repeat (sslength ss)
-            (setq ename (ssname ss i))
-            (if (eq ename top-ename)
-              nil
-              (if (aa:center-text-by-anchor ename base-x)
-                (setq changed (1+ changed))
-                (setq skipped (1+ skipped))
-              )
-            )
-            (setq i (1+ i))
-          )
-          (vla-endundomark doc)
-          (setq undo-open nil)
-          (princ
-            (strcat
-              "\n[ZHONG] ???. ???X: "
-              (rtos base-x 2 4)
-              ", ?????: "
-              (itoa changed)
-              ", ??????: "
-              (itoa skipped)
-              "."))
-        )
-        (princ "\n[ZHONG] ?????δ?????Ч??????ê??")
-      )
-    )
-    (princ "\n[ZHONG] δ????κ????????")
-  )
-  (princ)
 )
 
-(defun c:ZUO (/ *error* ss doc undo-open ref i ename base-x changed skipped)
-  (vl-load-com)
-  (setq doc       (vla-get-activedocument (vlax-get-acad-object))
-        undo-open nil
-        changed   0
-        skipped   0)
-  (defun *error* (msg)
-    (if undo-open
-      (vl-catch-all-apply 'vla-endundomark (list doc))
-    )
-    (if (and msg
-             (/= msg "Function cancelled")
-             (/= msg "quit / exit abort"))
-      (princ (strcat "\n[ZUO] Error: " msg))
-    )
-    (princ)
-  )
-  (princ "\n[ZUO] ??????????????...")
-  (if (setq ss (ssget '((0 . "TEXT,MTEXT"))))
-    (if (setq ref (aa:find-ref-by-top-bbox doc ss))
+(defun ysmod:project-root (/ r)
+  (setq r (ysmod:root))
+  (if r (vl-filename-directory r) nil)
+)
+
+(defun ysmod:load-first (files / done f)
+  (setq done nil)
+  (foreach f files
+    (if (and (null done) f (> (strlen f) 0) (findfile f))
       (progn
-        (setq base-x (aa:bbox-left-x (cadr ref)))
-        (vla-startundomark doc)
-        (setq undo-open T
-              i         0)
-        (repeat (sslength ss)
-          (setq ename (ssname ss i))
-          (if (eq ename (car ref))
-            nil
-            (if (aa:align-text-horizontal-by-bbox doc ename base-x 1)
-              (setq changed (1+ changed))
-              (setq skipped (1+ skipped))
-            )
-          )
-          (setq i (1+ i))
-        )
-        (vla-endundomark doc)
-        (setq undo-open nil)
-        (princ
-          (strcat
-            "\n[ZUO] ???. ???X: "
-            (rtos base-x 2 4)
-            ", ?????: "
-            (itoa changed)
-            ", ??????: "
-            (itoa skipped)
-            "."))
+        (load (findfile f) nil)
+        (setq done T)
       )
-      (princ "\n[ZUO] ?????δ?????Ч???????Χ??")
     )
-    (princ "\n[ZUO] δ????κ????????")
   )
-  (princ)
+  done
 )
 
-(defun c:YOU (/ *error* ss doc undo-open ref i ename base-x changed skipped)
-  (vl-load-com)
-  (setq doc       (vla-get-activedocument (vlax-get-acad-object))
-        undo-open nil
-        changed   0
-        skipped   0)
-  (defun *error* (msg)
-    (if undo-open
-      (vl-catch-all-apply 'vla-endundomark (list doc))
+(defun ysmod:load-aa (/ p)
+  (setq p (ysmod:project-root))
+  (ysmod:load-first
+    (list
+      (if p (strcat p "\\AA整合版本.lsp") "")
+      "E:/366256/vibecoding/CADTools/AA整合版本.lsp"
+      "AA整合版本.lsp"
     )
-    (if (and msg
-             (/= msg "Function cancelled")
-             (/= msg "quit / exit abort"))
-      (princ (strcat "\n[YOU] Error: " msg))
-    )
-    (princ)
   )
-  (princ "\n[YOU] ??????????????...")
-  (if (setq ss (ssget '((0 . "TEXT,MTEXT"))))
-    (if (setq ref (aa:find-ref-by-top-bbox doc ss))
-      (progn
-        (setq base-x (aa:bbox-right-x (cadr ref)))
-        (vla-startundomark doc)
-        (setq undo-open T
-              i         0)
-        (repeat (sslength ss)
-          (setq ename (ssname ss i))
-          (if (eq ename (car ref))
-            nil
-            (if (aa:align-text-horizontal-by-bbox doc ename base-x 3)
-              (setq changed (1+ changed))
-              (setq skipped (1+ skipped))
-            )
-          )
-          (setq i (1+ i))
-        )
-        (vla-endundomark doc)
-        (setq undo-open nil)
-        (princ
-          (strcat
-            "\n[YOU] ???. ???X: "
-            (rtos base-x 2 4)
-            ", ?????: "
-            (itoa changed)
-            ", ??????: "
-            (itoa skipped)
-            "."))
-      )
-      (princ "\n[YOU] ?????δ?????Ч???????Χ??")
-    )
-    (princ "\n[YOU] δ????κ????????")
-  )
-  (princ)
 )
 
-(defun c:SHANG (/ *error* ss doc undo-open ref i ename base-y changed skipped)
-  (vl-load-com)
-  (setq doc       (vla-get-activedocument (vlax-get-acad-object))
-        undo-open nil
-        changed   0
-        skipped   0)
-  (defun *error* (msg)
-    (if undo-open
-      (vl-catch-all-apply 'vla-endundomark (list doc))
+(defun ysmod:load-small (name / p)
+  (setq p (ysmod:project-root))
+  (ysmod:load-first
+    (list
+      (if p (strcat p "\\小命令\\" name) "")
+      (strcat "E:/366256/vibecoding/CADTools/小命令/" name)
+      (strcat "小命令\\" name)
+      name
     )
-    (if (and msg
-             (/= msg "Function cancelled")
-             (/= msg "quit / exit abort"))
-      (princ (strcat "\n[SHANG] Error: " msg))
-    )
-    (princ)
   )
-  (princ "\n[SHANG] ??????????????...")
-  (if (setq ss (ssget '((0 . "TEXT,MTEXT"))))
-    (if (setq ref (aa:find-ref-by-left-bbox doc ss))
-      (progn
-        (setq base-y (aa:bbox-top-y (cadr ref)))
-        (vla-startundomark doc)
-        (setq undo-open T
-              i         0)
-        (repeat (sslength ss)
-          (setq ename (ssname ss i))
-          (if (eq ename (car ref))
-            nil
-            (if (aa:align-text-vertical-by-bbox doc ename base-y 1)
-              (setq changed (1+ changed))
-              (setq skipped (1+ skipped))
-            )
-          )
-          (setq i (1+ i))
-        )
-        (vla-endundomark doc)
-        (setq undo-open nil)
-        (princ
-          (strcat
-            "\n[SHANG] ???. ???Y: "
-            (rtos base-y 2 4)
-            ", ?????: "
-            (itoa changed)
-            ", ??????: "
-            (itoa skipped)
-            "."))
-      )
-      (princ "\n[SHANG] ?????δ?????Ч???????Χ??")
-    )
-    (princ "\n[SHANG] δ????κ????????")
-  )
-  (princ)
 )
 
-(defun c:XIA (/ *error* ss doc undo-open ref i ename base-y changed skipped)
-  (vl-load-com)
-  (setq doc       (vla-get-activedocument (vlax-get-acad-object))
-        undo-open nil
-        changed   0
-        skipped   0)
-  (defun *error* (msg)
-    (if undo-open
-      (vl-catch-all-apply 'vla-endundomark (list doc))
-    )
-    (if (and msg
-             (/= msg "Function cancelled")
-             (/= msg "quit / exit abort"))
-      (princ (strcat "\n[XIA] Error: " msg))
-    )
-    (princ)
-  )
-  (princ "\n[XIA] ??????????????...")
-  (if (setq ss (ssget '((0 . "TEXT,MTEXT"))))
-    (if (setq ref (aa:find-ref-by-left-bbox doc ss))
-      (progn
-        (setq base-y (aa:bbox-bottom-y (cadr ref)))
-        (vla-startundomark doc)
-        (setq undo-open T
-              i         0)
-        (repeat (sslength ss)
-          (setq ename (ssname ss i))
-          (if (eq ename (car ref))
-            nil
-            (if (aa:align-text-vertical-by-bbox doc ename base-y 3)
-              (setq changed (1+ changed))
-              (setq skipped (1+ skipped))
-            )
-          )
-          (setq i (1+ i))
-        )
-        (vla-endundomark doc)
-        (setq undo-open nil)
-        (princ
-          (strcat
-            "\n[XIA] ???. ???Y: "
-            (rtos base-y 2 4)
-            ", ?????: "
-            (itoa changed)
-            ", ??????: "
-            (itoa skipped)
-            "."))
-      )
-      (princ "\n[XIA] ?????δ?????Ч???????Χ??")
-    )
-    (princ "\n[XIA] δ????κ????????")
-  )
-  (princ)
-)
-
-(princ "\n[YS-Tools] align-tools.lsp loaded.")
+(ysmod:load-aa)
+(princ "\n[YS-Tools] align-tools loaded from AA整合版本.lsp. Commands: ZUO, YOU, SHANG, XIA, ZHONG.")
 (princ)

@@ -1,149 +1,56 @@
-;;; ====================================================================
-;;; YS-Tools - ?????????
-;;; ????: Y(???) RR(???) UU(???) GG(???)
-;;; ====================================================================
+;;; YS-Tools module compatibility loader
+;;; Encoding: GBK/ANSI, CRLF
 
-(vl-load-com)
-
-(defun c:Y (/ *error* doc undo-open targetColor ss i ename)
-  (setq doc (vla-get-ActiveDocument (vlax-get-acad-object))
-        undo-open nil)
-  (defun *error* (msg)
-    (if undo-open
-      (vl-catch-all-apply 'vla-EndUndoMark (list doc))
-    )
-    (if (and msg
-             (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*EXIT*,*QUIT*")))
-      (princ (strcat "\n????: " msg))
-    )
-    (princ)
+(defun ysmod:root (/ p)
+  (cond
+    ((and (boundp '*YS-Tools-Path*) *YS-Tools-Path*) *YS-Tools-Path*)
+    ((findfile "YS-Tools\\YS-Tools.lsp") (vl-filename-directory (findfile "YS-Tools\\YS-Tools.lsp")))
+    ((findfile "YS-Tools.lsp") (vl-filename-directory (findfile "YS-Tools.lsp")))
+    (T nil)
   )
-  (setq targetColor *Y_TextColor*)
-  (princ "\n???????????????: ")
-  (setq ss (ssget))
-  (if ss
-    (progn
-      (vla-StartUndoMark doc)
-      (setq undo-open T)
-      (setq i 0)
-      (repeat (sslength ss)
-        (setq ename (ssname ss i))
-        (vla-put-Color (vlax-ename->vla-object ename) targetColor)
-        (setq i (1+ i))
-      )
-      (vla-EndUndoMark doc)
-      (setq undo-open nil)
-      (princ (strcat "\n?????ж???????????"))
-    )
-    (princ "\n???????κζ???")
-  )
-  (princ)
 )
 
-(defun c:RR (/ *error* doc undo-open targetColor ss i ename)
-  (setq doc (vla-get-ActiveDocument (vlax-get-acad-object))
-        undo-open nil)
-  (defun *error* (msg)
-    (if undo-open
-      (vl-catch-all-apply 'vla-EndUndoMark (list doc))
-    )
-    (if (and msg
-             (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*EXIT*,*QUIT*")))
-      (princ (strcat "\n????: " msg))
-    )
-    (princ)
-  )
-  (setq targetColor *RR_TextColor*)
-  (princ "\n????????????????: ")
-  (setq ss (ssget))
-  (if ss
-    (progn
-      (vla-StartUndoMark doc)
-      (setq undo-open T)
-      (setq i 0)
-      (repeat (sslength ss)
-        (setq ename (ssname ss i))
-        (vla-put-Color (vlax-ename->vla-object ename) targetColor)
-        (setq i (1+ i))
-      )
-      (vla-EndUndoMark doc)
-      (setq undo-open nil)
-      (princ "\n?????ж??????????")
-    )
-    (princ "\n???????κζ???")
-  )
-  (princ)
+(defun ysmod:project-root (/ r)
+  (setq r (ysmod:root))
+  (if r (vl-filename-directory r) nil)
 )
 
-(defun c:UU (/ *error* doc undo-open targetColor ss i ename)
-  (setq doc (vla-get-ActiveDocument (vlax-get-acad-object))
-        undo-open nil)
-  (defun *error* (msg)
-    (if undo-open
-      (vl-catch-all-apply 'vla-EndUndoMark (list doc))
-    )
-    (if (and msg
-             (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*EXIT*,*QUIT*")))
-      (princ (strcat "\n????: " msg))
-    )
-    (princ)
-  )
-  (setq targetColor *UU_TextColor*)
-  (princ "\n????????????????: ")
-  (setq ss (ssget))
-  (if ss
-    (progn
-      (vla-StartUndoMark doc)
-      (setq undo-open T)
-      (setq i 0)
-      (repeat (sslength ss)
-        (setq ename (ssname ss i))
-        (vla-put-Color (vlax-ename->vla-object ename) targetColor)
-        (setq i (1+ i))
+(defun ysmod:load-first (files / done f)
+  (setq done nil)
+  (foreach f files
+    (if (and (null done) f (> (strlen f) 0) (findfile f))
+      (progn
+        (load (findfile f) nil)
+        (setq done T)
       )
-      (vla-EndUndoMark doc)
-      (setq undo-open nil)
-      (princ "\n?????ж??????????")
     )
-    (princ "\n???????κζ???")
   )
-  (princ)
+  done
 )
 
-(defun c:GG (/ *error* doc undo-open targetColor ss i ename)
-  (setq doc (vla-get-ActiveDocument (vlax-get-acad-object))
-        undo-open nil)
-  (defun *error* (msg)
-    (if undo-open
-      (vl-catch-all-apply 'vla-EndUndoMark (list doc))
+(defun ysmod:load-aa (/ p)
+  (setq p (ysmod:project-root))
+  (ysmod:load-first
+    (list
+      (if p (strcat p "\\AA整合版本.lsp") "")
+      "E:/366256/vibecoding/CADTools/AA整合版本.lsp"
+      "AA整合版本.lsp"
     )
-    (if (and msg
-             (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*EXIT*,*QUIT*")))
-      (princ (strcat "\n????: " msg))
-    )
-    (princ)
   )
-  (setq targetColor *GG_TextColor*)
-  (princ "\n????????????????: ")
-  (setq ss (ssget))
-  (if ss
-    (progn
-      (vla-StartUndoMark doc)
-      (setq undo-open T)
-      (setq i 0)
-      (repeat (sslength ss)
-        (setq ename (ssname ss i))
-        (vla-put-Color (vlax-ename->vla-object ename) targetColor)
-        (setq i (1+ i))
-      )
-      (vla-EndUndoMark doc)
-      (setq undo-open nil)
-      (princ "\n?????ж??????????")
-    )
-    (princ "\n???????κζ???")
-  )
-  (princ)
 )
 
-(princ "\n[YS-Tools] color-tools.lsp loaded.")
+(defun ysmod:load-small (name / p)
+  (setq p (ysmod:project-root))
+  (ysmod:load-first
+    (list
+      (if p (strcat p "\\小命令\\" name) "")
+      (strcat "E:/366256/vibecoding/CADTools/小命令/" name)
+      (strcat "小命令\\" name)
+      name
+    )
+  )
+)
+
+(ysmod:load-aa)
+(princ "\n[YS-Tools] color-tools loaded from AA整合版本.lsp. Commands: Y, RR, UU, GG.")
 (princ)

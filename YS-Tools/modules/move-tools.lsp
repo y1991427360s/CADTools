@@ -1,117 +1,56 @@
-;;; ====================================================================
-;;; YS-Tools - ??????????
-;;; ????: SYI(????) XYI(????) ZYI(????) YYI(????)
-;;; ====================================================================
+;;; YS-Tools module compatibility loader
+;;; Encoding: GBK/ANSI, CRLF
 
-(vl-load-com)
-
-(defun c:SYI (/ *error* doc undo-open ss)
-  (setq doc (vla-get-ActiveDocument (vlax-get-acad-object))
-        undo-open nil)
-  (defun *error* (msg)
-    (if undo-open
-      (vl-catch-all-apply 'vla-EndUndoMark (list doc))
-    )
-    (if (and msg
-             (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*EXIT*,*QUIT*")))
-      (princ (strcat "\n????: " msg))
-    )
-    (princ)
+(defun ysmod:root (/ p)
+  (cond
+    ((and (boundp '*YS-Tools-Path*) *YS-Tools-Path*) *YS-Tools-Path*)
+    ((findfile "YS-Tools\\YS-Tools.lsp") (vl-filename-directory (findfile "YS-Tools\\YS-Tools.lsp")))
+    ((findfile "YS-Tools.lsp") (vl-filename-directory (findfile "YS-Tools.lsp")))
+    (T nil)
   )
-  (setq ss (ssget "_:L"))
-  (if ss
-    (progn
-      (vla-StartUndoMark doc)
-      (setq undo-open T)
-      (command "_.MOVE" ss "" "0,0,0" "0,5,0")
-      (vla-EndUndoMark doc)
-      (setq undo-open nil)
-    )
-    (princ "\n???????κζ???")
-  )
-  (princ)
 )
 
-(defun c:XYI (/ *error* doc undo-open ss)
-  (setq doc (vla-get-ActiveDocument (vlax-get-acad-object))
-        undo-open nil)
-  (defun *error* (msg)
-    (if undo-open
-      (vl-catch-all-apply 'vla-EndUndoMark (list doc))
-    )
-    (if (and msg
-             (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*EXIT*,*QUIT*")))
-      (princ (strcat "\n????: " msg))
-    )
-    (princ)
-  )
-  (setq ss (ssget "_:L"))
-  (if ss
-    (progn
-      (vla-StartUndoMark doc)
-      (setq undo-open T)
-      (command "_.MOVE" ss "" "0,0,0" "0,-5,0")
-      (vla-EndUndoMark doc)
-      (setq undo-open nil)
-    )
-    (princ "\n???????κζ???")
-  )
-  (princ)
+(defun ysmod:project-root (/ r)
+  (setq r (ysmod:root))
+  (if r (vl-filename-directory r) nil)
 )
 
-(defun c:ZYI (/ *error* doc undo-open ss)
-  (setq doc (vla-get-ActiveDocument (vlax-get-acad-object))
-        undo-open nil)
-  (defun *error* (msg)
-    (if undo-open
-      (vl-catch-all-apply 'vla-EndUndoMark (list doc))
+(defun ysmod:load-first (files / done f)
+  (setq done nil)
+  (foreach f files
+    (if (and (null done) f (> (strlen f) 0) (findfile f))
+      (progn
+        (load (findfile f) nil)
+        (setq done T)
+      )
     )
-    (if (and msg
-             (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*EXIT*,*QUIT*")))
-      (princ (strcat "\n????: " msg))
-    )
-    (princ)
   )
-  (setq ss (ssget "_:L"))
-  (if ss
-    (progn
-      (vla-StartUndoMark doc)
-      (setq undo-open T)
-      (command "_.MOVE" ss "" "0,0,0" "-5,0,0")
-      (vla-EndUndoMark doc)
-      (setq undo-open nil)
-    )
-    (princ "\n???????κζ???")
-  )
-  (princ)
+  done
 )
 
-(defun c:YYI (/ *error* doc undo-open ss)
-  (setq doc (vla-get-ActiveDocument (vlax-get-acad-object))
-        undo-open nil)
-  (defun *error* (msg)
-    (if undo-open
-      (vl-catch-all-apply 'vla-EndUndoMark (list doc))
+(defun ysmod:load-aa (/ p)
+  (setq p (ysmod:project-root))
+  (ysmod:load-first
+    (list
+      (if p (strcat p "\\AA整合版本.lsp") "")
+      "E:/366256/vibecoding/CADTools/AA整合版本.lsp"
+      "AA整合版本.lsp"
     )
-    (if (and msg
-             (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*EXIT*,*QUIT*")))
-      (princ (strcat "\n????: " msg))
-    )
-    (princ)
   )
-  (setq ss (ssget "_:L"))
-  (if ss
-    (progn
-      (vla-StartUndoMark doc)
-      (setq undo-open T)
-      (command "_.MOVE" ss "" "0,0,0" "5,0,0")
-      (vla-EndUndoMark doc)
-      (setq undo-open nil)
-    )
-    (princ "\n???????κζ???")
-  )
-  (princ)
 )
 
-(princ "\n[YS-Tools] move-tools.lsp loaded.")
+(defun ysmod:load-small (name / p)
+  (setq p (ysmod:project-root))
+  (ysmod:load-first
+    (list
+      (if p (strcat p "\\小命令\\" name) "")
+      (strcat "E:/366256/vibecoding/CADTools/小命令/" name)
+      (strcat "小命令\\" name)
+      name
+    )
+  )
+)
+
+(ysmod:load-aa)
+(princ "\n[YS-Tools] move-tools loaded from AA整合版本.lsp. Commands: SYI, XYI, ZYI, YYI.")
 (princ)
