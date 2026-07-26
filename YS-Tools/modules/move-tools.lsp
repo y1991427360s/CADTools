@@ -1,56 +1,50 @@
-;;; YS-Tools module compatibility loader
+;;; YS-Tools v1.5.0 module
 ;;; Encoding: GBK/ANSI, CRLF
 
-(defun ysmod:root (/ p)
-  (cond
-    ((and (boundp '*YS-Tools-Path*) *YS-Tools-Path*) *YS-Tools-Path*)
-    ((findfile "YS-Tools\\YS-Tools.lsp") (vl-filename-directory (findfile "YS-Tools\\YS-Tools.lsp")))
-    ((findfile "YS-Tools.lsp") (vl-filename-directory (findfile "YS-Tools.lsp")))
-    (T nil)
-  )
-)
+(if (and (boundp '*ys-module-move_tools-loaded*)
+         *ys-module-move_tools-loaded*)
+  (princ)
+  (progn
+    (vl-catch-all-apply 'vl-load-com '())
 
-(defun ysmod:project-root (/ r)
-  (setq r (ysmod:root))
-  (if r (vl-filename-directory r) nil)
-)
-
-(defun ysmod:load-first (files / done f)
-  (setq done nil)
-  (foreach f files
-    (if (and (null done) f (> (strlen f) 0) (findfile f))
-      (progn
-        (load (findfile f) nil)
-        (setq done T)
+    (defun c:SYI (/ ss)
+      (setq ss (ssget "_:L"))
+      (if ss
+        (command "_.MOVE" ss "" "0,0,0" "0,5,0")
+        (princ "\n未选择任何对象。")
       )
+      (princ)
     )
-  )
-  done
-)
 
-(defun ysmod:load-aa (/ p)
-  (setq p (ysmod:project-root))
-  (ysmod:load-first
-    (list
-      (if p (strcat p "\\AA整合版本.lsp") "")
-      "E:/366256/vibecoding/CADTools/AA整合版本.lsp"
-      "AA整合版本.lsp"
+    (defun c:XYI (/ ss)
+      (setq ss (ssget "_:L"))
+      (if ss
+        (command "_.MOVE" ss "" "0,0,0" "0,-5,0")
+        (princ "\n未选择任何对象。")
+      )
+      (princ)
     )
-  )
-)
 
-(defun ysmod:load-small (name / p)
-  (setq p (ysmod:project-root))
-  (ysmod:load-first
-    (list
-      (if p (strcat p "\\小命令\\" name) "")
-      (strcat "E:/366256/vibecoding/CADTools/小命令/" name)
-      (strcat "小命令\\" name)
-      name
+    (defun c:ZYI (/ ss)
+      (setq ss (ssget "_:L"))
+      (if ss
+        (command "_.MOVE" ss "" "0,0,0" "-5,0,0")
+        (princ "\n未选择任何对象。")
+      )
+      (princ)
     )
+
+    (defun c:YYI (/ ss)
+      (setq ss (ssget "_:L"))
+      (if ss
+        (command "_.MOVE" ss "" "0,0,0" "5,0,0")
+        (princ "\n未选择任何对象。")
+      )
+      (princ)
+    )
+
+    (setq *ys-module-move_tools-loaded* T)
+    (princ "\n[YS-Tools] move-tools.lsp loaded.")
   )
 )
-
-(ysmod:load-aa)
-(princ "\n[YS-Tools] move-tools loaded from AA整合版本.lsp. Commands: SYI, XYI, ZYI, YYI.")
 (princ)

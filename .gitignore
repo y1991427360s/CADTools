@@ -1,3 +1,6 @@
 YS-Tools/.git/
 YS-Tools/.git-disabled-before-cadtools-push/
 *.bak_before_ys_fix
+cad-registry-backups/
+__pycache__/
+*.pyc

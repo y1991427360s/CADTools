@@ -2,7 +2,7 @@
 // 兼容 AutoCAD 2018 + ZWCAD 2026
 
 ys_tools_toolbar : dialog {
-  label = "YS-Tools v1.3";
+  label = "YS-Tools v1.5.0";
   key = "ys_toolbar";
   initial_focus = "close_btn";
 
@@ -16,7 +16,7 @@ ys_tools_toolbar : dialog {
         : button { key = "btn_hei";    label = "HEI (修改字高)"; }
         : button { key = "btn_qstxt";  label = "QSTXT (快速文字)"; }
         : button { key = "btn_he";     label = "HE (文字求和)"; }
-        : button { key = "btn_qw";     label = "QW (前后缀)"; }
+        : button { key = "btn_qw";     label = "QW (修改字高)"; }
         : button { key = "btn_wi";     label = "WI (通配替换)"; }
         : button { key = "btn_gtx";    label = "GTX (提取文字)"; }
         : button { key = "btn_gty";    label = "GTY (提取文字)"; }
@@ -82,11 +82,56 @@ ys_tools_toolbar : dialog {
     }
   }
 
-  : button {
-    key = "close_btn";
-    label = "关闭";
-    is_cancel = true;
-    width = 12;
+  : row {
+    : button {
+      key = "btn_aa";
+      label = "AA整合版命令 (51)";
+      width = 22;
+      fixed_width = true;
+    }
+    : button {
+      key = "btn_aa_reload";
+      label = "重载 AA";
+      width = 12;
+      fixed_width = true;
+    }
+    : button {
+      key = "close_btn";
+      label = "关闭";
+      is_cancel = true;
+      width = 12;
+      fixed_width = true;
+    }
+  }
+}
+
+ys_aa_toolbar : dialog {
+  label = "AA整合版命令";
+  key = "ys_aa_toolbar";
+  initial_focus = "aa_command_list";
+
+  : list_box {
+    key = "aa_command_list";
+    width = 68;
+    height = 28;
     fixed_width = true;
+    fixed_height = true;
+  }
+
+  : row {
+    : button {
+      key = "aa_run_btn";
+      label = "执行";
+      is_default = true;
+      width = 12;
+      fixed_width = true;
+    }
+    : button {
+      key = "aa_close_btn";
+      label = "关闭";
+      is_cancel = true;
+      width = 12;
+      fixed_width = true;
+    }
   }
 }

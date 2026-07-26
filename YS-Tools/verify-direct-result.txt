@@ -1,5 +1,0 @@
-=== direct load verify ===
-ACADVER=20.0
-findfile main=C:\Users\ys199\AppData\Roaming\ZWSoft\ZWCAD\2026\zh-CN\Support\YS-Tools\YS-Tools.lsp
-bound *YS-Tools-Path*=YES
-*YS-Tools-Path*=C:\Users\ys199\AppData\Roaming\ZWSoft\ZWCAD\2026\zh-CN\Support\YS-Tools

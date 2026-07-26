@@ -1,56 +1,1233 @@
-;;; YS-Tools module compatibility loader
+;;; YS-Tools v1.5.0 module
 ;;; Encoding: GBK/ANSI, CRLF
 
-(defun ysmod:root (/ p)
-  (cond
-    ((and (boundp '*YS-Tools-Path*) *YS-Tools-Path*) *YS-Tools-Path*)
-    ((findfile "YS-Tools\\YS-Tools.lsp") (vl-filename-directory (findfile "YS-Tools\\YS-Tools.lsp")))
-    ((findfile "YS-Tools.lsp") (vl-filename-directory (findfile "YS-Tools.lsp")))
-    (T nil)
-  )
-)
+(if (and (boundp '*ys-module-text_tools-loaded*)
+         *ys-module-text_tools-loaded*)
+  (princ)
+  (progn
+    (vl-catch-all-apply 'vl-load-com '())
 
-(defun ysmod:project-root (/ r)
-  (setq r (ysmod:root))
-  (if r (vl-filename-directory r) nil)
-)
-
-(defun ysmod:load-first (files / done f)
-  (setq done nil)
-  (foreach f files
-    (if (and (null done) f (> (strlen f) 0) (findfile f))
-      (progn
-        (load (findfile f) nil)
-        (setq done T)
+    (defun aa:str-replace-all (old new str / start pos result old-len)
+      (setq str     (if str str "")
+            start   0
+            result  ""
+            old-len (strlen old))
+      (if (= old-len 0)
+        str
+        (progn
+          (while (setq pos (vl-string-search old str start))
+            (setq result
+                   (strcat
+                     result
+                     (if (> pos start)
+                       (substr str (1+ start) (- pos start))
+                       "")
+                     new)
+                  start (+ pos old-len))
+          )
+          (strcat result (substr str (1+ start)))
+        )
       )
     )
-  )
-  done
-)
 
-(defun ysmod:load-aa (/ p)
-  (setq p (ysmod:project-root))
-  (ysmod:load-first
-    (list
-      (if p (strcat p "\\AA整合版本.lsp") "")
-      "E:/366256/vibecoding/CADTools/AA整合版本.lsp"
-      "AA整合版本.lsp"
+    (defun aa:ysdl-get-raw-text (edata / etype raw pair)
+      (setq etype (cdr (assoc 0 edata))
+            raw   "")
+      (cond
+        ((= etype "MTEXT")
+         (foreach pair edata
+           (if (or (= (car pair) 3) (= (car pair) 1))
+             (setq raw (strcat raw (cdr pair)))
+           )
+         )
+        )
+        (T
+         (setq raw (cdr (assoc 1 edata)))
+        )
+      )
+      (if raw raw "")
     )
-  )
-)
 
-(defun ysmod:load-small (name / p)
-  (setq p (ysmod:project-root))
-  (ysmod:load-first
-    (list
-      (if p (strcat p "\\小命令\\" name) "")
-      (strcat "E:/366256/vibecoding/CADTools/小命令/" name)
-      (strcat "小命令\\" name)
-      name
+    (defun aa:ysdl-strip-mtext-format (str / idx len out ch next semi stack)
+      (setq str (if str str "")
+            idx 1
+            len (strlen str)
+            out "")
+      (while (<= idx len)
+        (setq ch (substr str idx 1))
+        (cond
+          ((or (= ch "{") (= ch "}"))
+           (setq idx (1+ idx)))
+          ((/= ch "\\")
+           (setq out (strcat out ch)
+                 idx (1+ idx)))
+          ((= idx len)
+           (setq idx (1+ idx)))
+          (T
+           (setq next (substr str (1+ idx) 1))
+           (cond
+             ((or (= next "\\") (= next "{") (= next "}"))
+              (setq out (strcat out next)
+                    idx (+ idx 2)))
+             ((or (= next "P") (= next "p") (= next "~"))
+              (setq out (strcat out " ")
+                    idx (+ idx 2)))
+             ((or (= next "L") (= next "l")
+                  (= next "O") (= next "o")
+                  (= next "K") (= next "k")
+                  (= next "X"))
+              (setq idx (+ idx 2)))
+             ((= next "S")
+              (setq semi (vl-string-search ";" str (+ idx 1)))
+              (if semi
+                (progn
+                  (setq stack (substr str (+ idx 2) (- semi idx 1)))
+                  (setq stack (aa:str-replace-all "#" "/" stack))
+                  (setq stack (aa:str-replace-all "^" "/" stack))
+                  (setq out (strcat out stack)
+                        idx (+ semi 2)))
+                (setq idx (+ idx 2))
+              )
+             )
+             ((or (= next "A") (= next "C") (= next "c")
+                  (= next "F") (= next "f")
+                  (= next "H") (= next "Q")
+                  (= next "T") (= next "W"))
+              (setq semi (vl-string-search ";" str (+ idx 1)))
+              (if semi
+                (setq idx (+ semi 2))
+                (setq idx (+ idx 2))
+              )
+             )
+             (T
+              (setq out (strcat out next)
+                    idx (+ idx 2)))
+           )
+          )
+        )
+      )
+      out
     )
+
+    (defun aa:ysdl-get-plain-text (edata / raw)
+      (setq raw (aa:ysdl-get-raw-text edata))
+      (if (= (cdr (assoc 0 edata)) "MTEXT")
+        (setq raw (aa:ysdl-strip-mtext-format raw))
+      )
+      raw
+    )
+
+    (defun aa:ysdl-needs-text-formula (str / first)
+      (and str
+           (> (strlen str) 0)
+           (setq first (substr str 1 1))
+           (or (= first "=") (= first "+") (= first "-") (= first "@")))
+    )
+
+    (defun aa:ysdl-build-csv-field (cell / field)
+      (setq field (if cell cell ""))
+      (if (aa:ysdl-needs-text-formula field)
+        (setq field (strcat (chr 9) field))
+      )
+      (setq field (aa:str-replace-all "\"" "\"\"" field))
+      (strcat "\"" field "\"")
+    )
+
+    (defun c:YSDL (/ *error* ss i ent edata text-data-list sorted-data
+                   csv-path f fuzz userprofile file-mode action-msg
+                   ename targetColor text-string ins-point all-rows current-row
+                   last-y item current-y line-str cell cell-safe)
+
+      ;; 自定义错误处理函数
+      (defun *error* (msg)
+        (if (and f (= (type f) 'FILE))
+          (close f)
+        )
+        (if (not (wcmatch (strcase msg) "*CANCEL*,*QUIT*"))
+          (princ (strcat "\n发生错误: " msg))
+        )
+        (princ)
+      )
+
+      ;; 从全局配置获取容差值
+      (setq fuzz *YSDL_RowFuzz*)
+
+      ;; 1. 提示用户选择文字对象
+      (princ "\n请选择要导出并改变颜色的文字对象: ")
+      (setq ss (ssget '((0 . "TEXT,MTEXT"))))
+
+      (if ss
+        (progn
+          ;; 2. 提取所选文字的内容和插入点坐标
+          (setq text-data-list '()
+                i 0)
+          (repeat (sslength ss)
+            (setq ent (ssname ss i))
+            (setq edata (entget ent))
+            (setq text-string (aa:ysdl-get-plain-text edata))
+            (setq ins-point (cdr (assoc 10 edata)))
+            (setq text-data-list (cons (list text-string ins-point) text-data-list))
+            (setq i (1+ i))
+          )
+
+          ;; 3. 按坐标排序 (从上到下，从左到右)
+          (setq sorted-data
+                 (vl-sort text-data-list
+                          '(lambda (item1 item2)
+                             (setq y1 (cadr (cadr item1)))
+                             (setq y2 (cadr (cadr item2)))
+                             (if (> y1 (+ y2 fuzz))
+                               T
+                               (if (< y1 (- y2 fuzz))
+                                 nil
+                                 (< (car (cadr item1)) (car (cadr item2)))
+                               )
+                             )
+                           )
+                 )
+          )
+
+          ;; 4. 将排序后的数据按行分组
+          (setq all-rows '())
+          (if sorted-data
+            (progn
+              (setq current-row (list (car (car sorted-data))))
+              (setq last-y (cadr (cadr (car sorted-data))))
+              (foreach item (cdr sorted-data)
+                (setq current-y (cadr (cadr item)))
+                (if (<= (abs (- current-y last-y)) fuzz)
+                  (setq current-row (append current-row (list (car item))))
+                  (progn
+                    (setq all-rows (append all-rows (list current-row)))
+                    (setq current-row (list (car item)))
+                  )
+                )
+                (setq last-y current-y)
+              )
+              (setq all-rows (append all-rows (list current-row)))
+            )
+          )
+
+          ;; 5. 自动定位桌面路径并写入或追加CSV文件
+          (setq userprofile (getenv "USERPROFILE"))
+          (if (and userprofile (/= userprofile ""))
+            (progn
+              (setq csv-path (strcat userprofile "\\Desktop\\" *YSDL_CsvFileName*))
+              (if (findfile csv-path)
+                (progn (setq file-mode "a") (setq action-msg "数据已成功追加到桌面文件:\n"))
+                (progn (setq file-mode "w") (setq action-msg "已在桌面成功创建文件:\n"))
+              )
+
+              (setq f (open csv-path file-mode))
+              (foreach row all-rows
+                (setq line-str "")
+                (foreach cell row
+                    (setq cell-safe (aa:ysdl-build-csv-field cell))
+                    (setq line-str (strcat line-str cell-safe ","))
+                )
+                (setq line-str (substr line-str 1 (1- (strlen line-str))))
+                (write-line line-str f)
+              )
+              (close f)
+
+              ;; 修改已导出文字的颜色
+              (setq targetColor *YSDL_TextColor*)
+              (setq i 0)
+              (repeat (sslength ss)
+                (setq ename (ssname ss i))
+                (vla-put-Color (vlax-ename->vla-object ename) targetColor)
+                (setq i (1+ i))
+              )
+
+              (alert (strcat action-msg csv-path "\n\n并且所有选中的文字颜色已更改。"))
+            )
+            (alert "错误: 无法自动获取您的桌面路径!")
+          )
+        )
+        (princ "\n未选择任何文字对象。")
+      )
+      (princ)
+    )
+
+    (defun C:CONT ( / ss i en edata ent-list sorted-list ref-pt target-x current-y new-pt etype orig-z top-en top-edata pt)
+      (command "_.UNDO" "_Begin")
+      (setq ss (ssget "_P" '((0 . "TEXT,MTEXT"))))
+
+      (if (not ss)
+        (progn
+          (princ "\n未预先选择对象，请选择要修改和对齐的文字: ")
+          (setq ss (ssget '((0 . "TEXT,MTEXT"))))
+        )
+      )
+
+      (if ss
+        (progn
+          (if (not (tblsearch "STYLE" *CONT_TextStyle*))
+            (alert (strcat "错误：\n\n当前图纸中不存在名为“" *CONT_TextStyle* "”的文字样式。\n请先创建该样式后再运行本插件。"))
+            (progn
+              (setq i 0 ent-list '())
+              (repeat (sslength ss)
+                (setq en (ssname ss i))
+                (setq edata (entget en))
+                (setq pt (cdr (assoc 10 edata)))
+                (setq ent-list (cons (list (cadr pt) en) ent-list))
+                (setq i (1+ i))
+              )
+
+              (setq sorted-list (vl-sort ent-list '(lambda (a b) (> (car a) (car b)))))
+
+              (setq top-en (cadr (car sorted-list)))
+              (setq top-edata (entget top-en))
+              (setq ref-pt (cdr (assoc 10 top-edata)))
+
+              (setq target-x (car ref-pt))
+              (setq current-y (cadr ref-pt))
+
+              (foreach item sorted-list
+                (setq en (cadr item))
+                (setq edata (entget en))
+                (setq etype (cdr (assoc 0 edata)))
+                (setq orig-z (caddr (cdr (assoc 10 edata))))
+
+                (setq new-pt (list target-x current-y orig-z))
+
+                (setq edata (subst (cons 7 *CONT_TextStyle*) (assoc 7 edata) edata))
+                (setq edata (subst (cons 40 *CONT_TextHeight*) (assoc 40 edata) edata))
+                (setq edata (subst (cons 10 new-pt) (assoc 10 edata) edata))
+
+                (if (= etype "TEXT")
+                  (progn
+                    (setq edata (subst (cons 41 *CONT_TextWidthFactor*) (assoc 41 edata) edata))
+                    (setq edata (subst (cons 72 0) (assoc 72 edata) edata))
+                    (setq edata (subst (cons 73 0) (assoc 73 edata) edata))
+                  )
+                  (setq edata (subst (cons 71 7) (assoc 71 edata) edata))
+                )
+
+                (entmod edata)
+                (setq current-y (- current-y *CONT_LineSpacing*))
+              )
+              (princ (strcat "\n已成功处理 " (itoa (length sorted-list)) " 个文字对象。"))
+            )
+          )
+        )
+        (princ "\n未选择任何文字对象。")
+      )
+      (command "_.UNDO" "_End")
+      (princ)
+    )
+
+    (defun c:qstxt (/ ss i ent txt)
+      (setq ss (ssget))
+      (if ss
+        (progn
+          (setq txt (ssadd))
+          (setq i 0)
+          (while (< i (sslength ss))
+            (setq ent (ssname ss i))
+            (if (wcmatch (cdr (assoc 0 (entget ent))) "*TEXT")
+              (ssadd ent txt)
+            )
+            (setq i (1+ i))
+          )
+
+          (if (> (sslength txt) 0)
+            (progn
+              (sssetfirst nil txt)
+              (princ (strcat "\n已选择 " (itoa (sslength txt)) " 个文字对象"))
+            )
+            (princ "\n所选对象中没有找到文字对象")
+          )
+        )
+        (princ "\n未选择任何对象")
+      )
+      (princ)
+    )
+
+        (defun txt:set-dxf (code value data / item)
+      (if (setq item (assoc code data))
+        (subst (cons code value) item data)
+        (append data (list (cons code value)))
+      )
+    )
+
+    (defun txt:modify-text (ename / edata)
+      (if (and ename (= "TEXT" (cdr (assoc 0 (setq edata (entget ename))))))
+        (progn
+          (setq edata (txt:set-dxf 7 "HZ" edata))
+          (setq edata (txt:set-dxf 40 3.0 edata))
+          (setq edata (txt:set-dxf 41 0.7 edata))
+          (if (entmod edata) 1 0)
+        )
+        0
+      )
+    )
+
+    (defun txt:modify-new-texts (before after / cur count)
+      (setq count 0)
+      (if (and after (not (eq before after)))
+        (progn
+          (setq cur (if before (entnext before) (entnext)))
+          (while cur
+            (if (= "TEXT" (cdr (assoc 0 (entget cur))))
+              (setq count (+ count (txt:modify-text cur)))
+            )
+            (if (eq cur after)
+              (setq cur nil)
+              (setq cur (entnext cur))
+            )
+          )
+        )
+      )
+      count
+    )
+
+    (defun txt:process-selection (sel / *error* oldcmdecho total i ename etype mtss mtlist before after count)
+      (defun *error* (msg)
+        (if oldcmdecho
+          (setvar "CMDECHO" oldcmdecho)
+        )
+        (if (and msg (/= msg "Function cancelled") (/= msg "quit / exit abort"))
+          (princ (strcat "\nError: " msg))
+        )
+        (princ)
+      )
+
+      (setq oldcmdecho (getvar "CMDECHO"))
+      (setvar "CMDECHO" 0)
+      (setq total  (sslength sel)
+            mtss   (ssadd)
+            mtlist '()
+            count  0
+            i      0)
+
+      ;; Modify TEXT immediately instead of building another large selection set.
+      (while (< i total)
+        (setq ename (ssname sel i)
+              etype (cdr (assoc 0 (entget ename))))
+        (cond
+          ((= etype "TEXT")
+           (setq count (+ count (txt:modify-text ename))))
+          ((= etype "MTEXT")
+           (ssadd ename mtss)
+           (setq mtlist (cons ename mtlist)))
+        )
+        (setq i (1+ i))
+      )
+
+      ;; Explode all MTEXT objects in one native command invocation.
+      (if (> (sslength mtss) 0)
+        (progn
+          (setq before (entlast))
+          (command "_.explode" mtss "")
+
+          ;; Retry only objects left behind by CAD versions that do not accept a
+          ;; multi-object selection set from AutoLISP EXPLODE.
+          (foreach ename mtlist
+            (if (= "MTEXT" (cdr (assoc 0 (entget ename))))
+              (command "_.explode" ename)
+            )
+          )
+
+          ;; Process the new database range directly; do not copy it into a list
+          ;; or reselect every result, both of which are costly in ZWCAD.
+          (setq after (entlast)
+                count (+ count (txt:modify-new-texts before after)))
+        )
+      )
+
+      (redraw)
+      (setvar "CMDECHO" oldcmdecho)
+      (princ (strcat "\nProcessed text count: " (itoa count)))
+      count
+    )
+
+    (defun txt:run (/ sel)
+      (if (null (tblsearch "STYLE" "HZ"))
+        (princ "\nText style HZ was not found.")
+        (progn
+          (setq sel (ssget '((0 . "TEXT,MTEXT"))))
+          (if sel
+            (txt:process-selection sel)
+            (princ "\nNo objects were selected.")
+          )
+        )
+      )
+      (princ)
+    )
+
+    (defun c:TXT ()
+      (txt:run)
+    )
+
+    (defun c:T ()
+      (txt:run)
+    )
+
+    (defun c:HEI (/ a ss ent ent_data text_type insertion_point x y text_content
+                  text_list sorted_text_list base_x max_y current_y count modified_data)
+      (vl-load-com) ; 加载 Visual LISP 扩展功能
+      (setq a (getdist "\n请输入上下间距 <5>: "))
+      (if (not a)
+        (setq a 5)
+      )
+
+      (princ "\n选择要对齐的文字对象: ")
+      (setq ss (ssget '((0 . "TEXT,MTEXT"))))
+
+      (if (not ss)
+        (progn (princ "\n未选择任何文字对象。") (exit))
+      )
+
+      (setq text_list '() count 0)
+      (repeat (sslength ss)
+        (setq ent (ssname ss count) ent_data (entget ent) text_type (cdr (assoc 0 ent_data)) modified_data ent_data)
+
+        (cond
+          ((= text_type "TEXT")
+            ;; 修改水平对齐 (72) 为 0 (左对齐)
+            (if (assoc 72 modified_data)
+                (setq modified_data (subst (cons 72 0) (assoc 72 modified_data) modified_data))
+                (setq modified_data (append modified_data (list (cons 72 0))))
+            )
+            ;; 修改垂直对齐 (73) 为 0 (基线对齐)
+            (if (assoc 73 modified_data)
+                (setq modified_data (subst (cons 73 0) (assoc 73 modified_data) modified_data))
+                (setq modified_data (append modified_data (list (cons 73 0))))
+            )
+            ;; 移除组码 11 (对齐点)，左对齐不需要此点
+            (if (assoc 11 modified_data) (setq modified_data (vl-remove (assoc 11 modified_data) modified_data)))
+          )
+          ((= text_type "MTEXT")
+            ;; 修改对齐点 (71) 为 1 (左上角)
+            (if (assoc 71 modified_data)
+                (setq modified_data (subst (cons 71 1) (assoc 71 modified_data) modified_data))
+                (setq modified_data (append modified_data (list (cons 71 1))))
+            )
+          )
+        )
+
+        ;; 先更新实体对齐方式，这样文字的插入点会自动更新到左侧位置
+        (entmod modified_data)
+
+        ;; 重新获取数据以读取更新后的坐标
+        (setq ent_data (entget ent)
+              insertion_point (cdr (assoc 10 ent_data))
+              x (car insertion_point)
+              y (cadr insertion_point)
+              text_content (cdr (assoc 1 ent_data)) ; 注意：MTEXT 内容可能很长，但这不影响排序逻辑
+        )
+
+        ;; 保存数据用于排序：Y坐标 X坐标 内容 实体名
+        (setq text_list (cons (list y x text_content ent) text_list))
+        (setq count (1+ count))
+      )
+
+      ;; 排序逻辑：按 Y 坐标从大到小排序 (从上到下)
+      (setq sorted_text_list (vl-sort text_list '(lambda (a b) (> (car a) (car b)))))
+
+      ;; 计算基准点：X取所有文字中最小的X值(最左边)，起始Y取最高的Y值
+      (setq base_x (apply 'min (mapcar 'cadr sorted_text_list))
+            max_y (apply 'max (mapcar 'car sorted_text_list)))
+
+      (setq current_y max_y count 0)
+
+      (foreach text_info sorted_text_list
+        (setq ent (last text_info) ent_data (entget ent))
+        ;; 保持原有的 Z 坐标
+        (setq new_insertion_point (list base_x current_y (caddr (cdr (assoc 10 ent_data))))
+              ent_data (subst (cons 10 new_insertion_point) (assoc 10 ent_data) ent_data))
+        (entmod ent_data)
+        (setq current_y (- current_y a))
+        (setq count (1+ count))
+      )
+
+      (princ (strcat "\n成功对齐并排列了 " (itoa count) " 个文字对象，并已统一设置为左对齐。"))
+      (princ)
+    )
+
+    (defun c:HE (/ ss lst i ent ent-data pt txt ht sorted-lst master-ent master-data new-str)
+      (vl-load-com) ;; 加载 VL 扩展函数
+
+      (princ "\n请选择需要合并的文字(按照从上到下，从左到右的逻辑合并):")
+
+      ;; 1. 选择文字对象 (过滤 Text 和 MText)
+      (if (setq ss (ssget '((0 . "TEXT,MTEXT"))))
+        (progn
+          (setq lst '())
+          (setq i 0)
+
+          ;; 2. 遍历选择集，提取实体名、坐标、高度和内容
+          (repeat (sslength ss)
+            (setq ent (ssname ss i))
+            (setq ent-data (entget ent))
+            (setq pt (cdr (assoc 10 ent-data))) ;; 插入点
+            (setq txt (cdr (assoc 1 ent-data))) ;; 文字内容
+            (setq ht (cdr (assoc 40 ent-data))) ;; 文字高度 (用于判断容差)
+
+            ;; 将数据存入列表: (实体名 插入点 文字内容 文字高度)
+            (setq lst (cons (list ent pt txt ht) lst))
+            (setq i (1+ i))
+          )
+
+          ;; 3. 排序算法 (修正版：去除 let，使用标准 AutoLISP)
+          (setq sorted-lst
+            (vl-sort lst
+              (function (lambda (e1 e2 / p1 p2 h y1 y2 x1 x2)
+                ;; 提取变量
+                (setq p1 (cadr e1))
+                (setq p2 (cadr e2))
+                (setq h (cadddr e1)) ;; 使用第一个对象的文字高度做参考
+                (setq y1 (cadr p1))
+                (setq y2 (cadr p2))
+                (setq x1 (car p1))
+                (setq x2 (car p2))
+
+                ;; 判断逻辑
+                (if (> (abs (- y1 y2)) (* h 0.5))
+                  (> y1 y2) ;; Y轴差值大：按Y从大到小(上到下)
+                  (< x1 x2) ;; Y轴差值小(同一行)：按X从小到大(左到右)
+                )
+              ))
+            )
+          )
+
+          ;; 4. 合并文字
+          (setq master-ent (car (car sorted-lst))) ;; 获取排序后的第一个实体作为主实体
+          (setq new-str "")
+
+          ;; 遍历排序后的列表，拼接字符串
+          (foreach item sorted-lst
+            (setq new-str (strcat new-str (caddr item)))
+          )
+
+          ;; 5. 更新主实体并删除其他实体
+          ;; 更新主实体内容
+          (setq master-data (entget master-ent))
+          (setq master-data (subst (cons 1 new-str) (assoc 1 master-data) master-data))
+          (entmod master-data)
+          (entupd master-ent)
+
+          ;; 删除其余实体
+          (foreach item (cdr sorted-lst)
+            (entdel (car item))
+          )
+
+          (princ (strcat "\n成功合并 " (itoa (length sorted-lst)) " 个文字对象。结果: " new-str))
+        )
+        (princ "\n未选中任何文字对象。")
+      )
+      (princ)
+    )
+
+    (defun c:QW (/ a ss i ent data)
+      ;; 1. 提示用户输入高度值并存储在变量 a 中
+      (setq a (getdist "\n请输入新的文字高度: "))
+
+      ;; 2. 检查高度值是否有效
+      (if (and a (> a 0))
+        (progn
+          ;; 3. 提示用户选择对象，并过滤出单行文字(TEXT)和多行文字(MTEXT)
+          (princ "\n请选择需要修改高度的文字内容...")
+          (setq ss (ssget '((0 . "TEXT,MTEXT"))))
+
+          ;; 4. 检查是否选中了内容
+          (if ss
+            (progn
+              (setq i 0)
+              ;; 5. 遍历选择集
+              (repeat (sslength ss)
+                (setq ent (ssname ss i))
+                (setq data (entget ent))
+
+                ;; 6. 使用 subst 和 entmod 修改 DXF 组码 40 (高度)
+                ;; assoc 40 获取当前高度，cons 40 a 构造新的高度项
+                (setq data (subst (cons 40 a) (assoc 40 data) data))
+                (entmod data)
+
+                (setq i (1+ i))
+              )
+              (princ (strcat "\n操作成功！已将 " (itoa i) " 个文字的高度修改为: " (rtos a)))
+            )
+            (princ "\n未选中任何文字对象。")
+          )
+        )
+        (princ "\n错误：请输入有效的高度数值。")
+      )
+      ;; 静默退出
+      (princ)
+    )
+
+    (defun c:wi (/ a ss i ename elist old_width)
+      ;; 1. 提示用户输入文字宽度比例
+      (setq a (getreal "\n请输入新的文字宽度比例 (例如 0.8 或 1.0): "))
+
+      ;; 2. 检查输入是否有效
+      (if (and a (> a 0))
+        (progn
+          ;; 3. 提示选择对象（过滤只选择 TEXT 和 MTEXT）
+          (princ "\n请选择要修改的文字对象: ")
+          (setq ss (ssget '((0 . "TEXT,MTEXT"))))
+
+          (if ss
+            (progn
+              (setq i 0)
+              ;; 4. 遍历选择集
+              (repeat (sslength ss)
+                (setq ename (ssname ss i))
+                (setq elist (entget ename))
+
+                ;; 对于普通文字 (TEXT)，41号组码是宽度比例
+                ;; 对于多行文字 (MTEXT)，41号组码是参照矩形宽度
+                ;; 这里统一处理 41 号组码
+                (if (assoc 41 elist)
+                  (setq elist (subst (cons 41 a) (assoc 41 elist) elist))
+                  (setq elist (append elist (list (cons 41 a))))
+                )
+
+                ;; 更新实体数据
+                (entmod elist)
+                (setq i (1+ i))
+              )
+              (princ (strcat "\n成功修改了 " (itoa (sslength ss)) " 个文字的宽度比例。"))
+            )
+            (princ "\n未选中任何有效的文字对象。")
+          )
+        )
+        (princ "\n无效的宽度数值，请输入大于0的数字。")
+      )
+      (princ)
+    )
+
+    (defun aa:gtx-find-last-char (char str / len pos)
+      (setq len (strlen str)
+            pos nil)
+      (while (and (> len 0) (not pos))
+        (if (= (substr str len 1) char)
+          (setq pos len)
+          (setq len (1- len))
+        )
+      )
+      pos
+    )
+
+    (defun aa:gtx-parse-suffix (suffix / i char num-str alpha-str)
+      (setq i 1
+            num-str ""
+            alpha-str "")
+      (while (<= i (strlen suffix))
+        (setq char (substr suffix i 1))
+        (if (wcmatch char "#")
+          (setq num-str (strcat num-str char))
+          (setq alpha-str (strcat alpha-str char))
+        )
+        (setq i (1+ i))
+      )
+      (list (atoi num-str) alpha-str)
+    )
+
+    (defun aa:gtx-create-text-entity (pt content h sty)
+      (entmake
+        (list
+          '(0 . "TEXT")
+          (cons 10 pt)
+          (cons 40 h)
+          (cons 1 content)
+          (cons 7 sty)
+          '(41 . 0.7)
+          '(62 . 7)))
+    )
+
+    (defun aa:gtx-first-text-from-ss (ss / i en)
+      (setq i 0
+            en nil)
+      (while (and ss (< i (sslength ss)) (not en))
+        (if (eq "TEXT" (cdr (assoc 0 (entget (ssname ss i)))))
+          (setq en (ssname ss i))
+        )
+        (setq i (1+ i))
+      )
+      en
+    )
+
+    (defun aa:gtx-select-prefix-text (/ prefix-ss prefix-ent)
+      (setq prefix-ent nil)
+      (while (not prefix-ent)
+        (sssetfirst nil nil)
+        (prompt "\n[GTX] Select TEXT to add before each group (window selection supported): ")
+        (setq prefix-ss (ssget '((0 . "TEXT"))))
+        (setq prefix-ent (aa:gtx-first-text-from-ss prefix-ss))
+        (if (not prefix-ent)
+          (prompt "\n[GTX] No TEXT selected. Select or window-select one TEXT; press Esc to cancel.")
+        )
+      )
+      prefix-ent
+    )
+
+    (defun c:GTX (/ *error* ss i ent ent-data text-data text-string insertion-point
+                   lines current-item current-y found line categorized-groups
+                   left-text temp-text last-hyphen-pos category group-texts found-category
+                   pt start-x current-x col-width line-height text-height text-style
+                   category-group groups-in-category sorted-groups group text-item
+                   split-groups current-group last-item-x current-item-x
+                   prefix-text-ent prefix-text-str)
+
+      (vl-load-com)
+      (setq text-style (if (tblsearch "STYLE" "HZ")
+                         "HZ"
+                         (getvar "TEXTSTYLE")))
+
+      (defun *error* (msg)
+        (if (not (member msg '("Function cancelled" "quit / exit abort")))
+          (princ (strcat "\n[GTX] Error: " msg))
+        )
+        (sssetfirst nil nil)
+        (princ)
+      )
+
+      (setq ss (ssget "_I" '((0 . "TEXT"))))
+      (if (not ss)
+        (progn
+          (prompt "\n[GTX] Select text to classify: ")
+          (setq ss (ssget '((0 . "TEXT"))))
+        )
+      )
+
+      (if ss
+        (progn
+          (setq prefix-text-ent (aa:gtx-select-prefix-text))
+          (setq prefix-text-str (cdr (assoc 1 (entget prefix-text-ent))))
+
+          (if prefix-text-str
+            (progn
+              (setq text-data '()
+                    i         0)
+              (repeat (sslength ss)
+                (setq ent             (ssname ss i)
+                      ent-data        (entget ent)
+                      text-string     (cdr (assoc 1 ent-data))
+                      insertion-point (cdr (assoc 10 ent-data))
+                      text-data       (cons (list text-string insertion-point) text-data)
+                      i               (1+ i))
+              )
+
+              (setq lines '())
+              (foreach current-item text-data
+                (setq current-y (cadr (cadr current-item))
+                      found     nil)
+                (setq lines
+                  (mapcar
+                    '(lambda (line)
+                       (if (and (not found)
+                                (< (abs (- current-y (cadr (cadr (car line))))) 1.0))
+                         (progn
+                           (setq found T)
+                           (cons current-item line))
+                         line))
+                    lines))
+                (if (not found)
+                  (setq lines (cons (list current-item) lines)))
+              )
+
+              (setq lines
+                (mapcar
+                  '(lambda (line)
+                     (vl-sort line '(lambda (a b) (< (car (cadr a)) (car (cadr b))))))
+                  lines))
+
+              (setq split-groups '())
+              (foreach line lines
+                (if line
+                  (progn
+                    (setq current-group (list (car line))
+                          last-item-x   (car (cadr (car line))))
+                    (foreach item (cdr line)
+                      (setq current-item-x (car (cadr item)))
+                      (if (> (- current-item-x last-item-x) 200.0)
+                        (progn
+                          (setq split-groups (cons current-group split-groups))
+                          (setq current-group (list item)))
+                        (setq current-group (append current-group (list item)))
+                      )
+                      (setq last-item-x current-item-x)
+                    )
+                    (setq split-groups (cons current-group split-groups))
+                  )
+                )
+              )
+              (setq lines (reverse split-groups))
+
+              (setq categorized-groups '())
+              (foreach line lines
+                (if (>= (length line) 1)
+                  (progn
+                    (setq left-text (caar line)
+                          temp-text left-text)
+                    (if (wcmatch temp-text "并入*")
+                      (setq temp-text (vl-string-subst "" "并入" temp-text))
+                    )
+                    (setq last-hyphen-pos (aa:gtx-find-last-char "-" temp-text))
+                    (if last-hyphen-pos
+                      (setq category (substr temp-text 1 last-hyphen-pos))
+                      (setq category temp-text)
+                    )
+                    (setq group-texts    (mapcar 'car line)
+                          found-category (assoc category categorized-groups))
+                    (if found-category
+                      (setq categorized-groups
+                        (subst
+                          (list category (cons group-texts (cadr found-category)))
+                          found-category
+                          categorized-groups))
+                      (setq categorized-groups
+                        (cons (list category (list group-texts)) categorized-groups))
+                    )
+                  )
+                )
+              )
+
+              (setq pt (getpoint "\n[GTX] Specify insertion point for summary: "))
+              (if pt
+                (progn
+                  (setq text-height 3.0
+                        start-x     (car pt)
+                        current-y   (cadr pt)
+                        col-width   50.0
+                        line-height (* 1.4 text-height))
+
+                  (setq categorized-groups
+                    (vl-sort categorized-groups '(lambda (a b) (< (car a) (car b)))))
+
+                  (foreach category-group categorized-groups
+                    (setq groups-in-category (cadr category-group))
+
+                    (setq sorted-groups
+                      (vl-sort
+                        groups-in-category
+                        '(lambda (itemA itemB / keyA keyB posA posB suffixA suffixB parsedA parsedB numA alphaA numB alphaB)
+                           (setq keyA (car itemA)
+                                 keyB (car itemB)
+                                 posA (aa:gtx-find-last-char "-" keyA)
+                                 posB (aa:gtx-find-last-char "-" keyB))
+                           (if (and posA posB)
+                             (progn
+                               (setq suffixA (substr keyA (1+ posA))
+                                     suffixB (substr keyB (1+ posB))
+                                     parsedA (aa:gtx-parse-suffix suffixA)
+                                     parsedB (aa:gtx-parse-suffix suffixB)
+                                     numA    (car parsedA)
+                                     alphaA  (cadr parsedA)
+                                     numB    (car parsedB)
+                                     alphaB  (cadr parsedB))
+                               (if (= numA numB)
+                                 (< alphaA alphaB)
+                                 (< numA numB)))
+                             (< keyA keyB))))
+                    )
+
+                    (foreach group sorted-groups
+                      (setq current-x start-x)
+                      (aa:gtx-create-text-entity (list current-x current-y 0.0) prefix-text-str text-height text-style)
+                      (setq current-x (+ current-x col-width))
+                      (foreach text-item group
+                        (aa:gtx-create-text-entity (list current-x current-y 0.0) text-item text-height text-style)
+                        (setq current-x (+ current-x col-width))
+                      )
+                      (setq current-y (- current-y line-height))
+                    )
+                    (setq current-y (- current-y (* 0.5 line-height)))
+                  )
+                  (princ "\n[GTX] Text classification completed.")
+                )
+                (princ "\n[GTX] Operation cancelled.")
+              )
+            )
+            (princ "\n[GTX] No valid prefix TEXT selected.")
+          )
+        )
+        (princ "\n[GTX] No text selected.")
+      )
+      (sssetfirst nil nil)
+      (princ)
+    )
+
+    (defun aa:gty-pad-left (txt size / result)
+      (setq result txt)
+      (while (< (strlen result) size)
+        (setq result (strcat "0" result))
+      )
+      result
+    )
+
+    (defun aa:gty-normalize-key (txt / src i char num-buf result)
+      (setq src     (strcase (vl-string-trim " " (if txt txt "")))
+            i       1
+            num-buf ""
+            result  "")
+      (while (<= i (strlen src))
+        (setq char (substr src i 1))
+        (if (wcmatch char "#")
+          (setq num-buf (strcat num-buf char))
+          (progn
+            (if (> (strlen num-buf) 0)
+              (progn
+                (setq result  (strcat result (aa:gty-pad-left num-buf 8))
+                      num-buf ""))
+            )
+            (setq result (strcat result char))
+          )
+        )
+        (setq i (1+ i))
+      )
+      (if (> (strlen num-buf) 0)
+        (setq result (strcat result (aa:gty-pad-left num-buf 8)))
+      )
+      result
+    )
+
+    (defun aa:gty-get-item-ename (item) (nth 0 item))
+
+    (defun aa:gty-get-item-text  (item) (nth 1 item))
+
+    (defun aa:gty-get-item-pt    (item) (nth 2 item))
+
+    (defun aa:gty-get-item-x     (item) (car (aa:gty-get-item-pt item)))
+
+    (defun aa:gty-get-item-y     (item) (cadr (aa:gty-get-item-pt item)))
+
+    (defun aa:gty-get-item-z     (item / pt)
+      (setq pt (aa:gty-get-item-pt item))
+      (if (caddr pt) (caddr pt) 0.0)
+    )
+
+    (defun aa:gty-get-item-width (item) (nth 3 item))
+
+    (defun aa:gty-get-item-height (item) (nth 4 item))
+
+    (defun aa:gty-build-sort-key (row idx / key)
+      (if (>= (length row) 4)
+        (setq key (aa:gty-normalize-key (aa:gty-get-item-text (nth 1 row))))
+        (setq key "")
+      )
+      (strcat
+        (if (> (strlen key) 0) "0|" "1|")
+        key
+        "|"
+        (aa:gty-pad-left (itoa idx) 6))
+    )
+
+    (defun aa:gty-get-text-width (edata / box p1 p2 h txt)
+      (setq h   (cond ((cdr (assoc 40 edata))) (3.0))
+            txt (cdr (assoc 1 edata))
+            box (textbox edata))
+      (if (and box (= (length box) 2))
+        (progn
+          (setq p1 (car box)
+                p2 (cadr box))
+          (max (- (car p2) (car p1)) h))
+        (max (* (strlen txt) h 0.7) h))
+    )
+
+    (defun aa:gty-update-nth (idx val lst / n result)
+      (setq n 0
+            result '())
+      (foreach itm lst
+        (setq result (cons (if (= n idx) val itm) result)
+              n      (1+ n))
+      )
+      (reverse result)
+    )
+
+    (defun aa:gty-move-entity (ename from-pt to-pt / obj)
+      (setq obj (vlax-ename->vla-object ename))
+      (vla-move obj (vlax-3d-point from-pt) (vlax-3d-point to-pt))
+    )
+
+    (defun c:GTY (/ *error* ss i ent ent-data text-string insertion-point text-height text-width
+                   text-data total-height avg-height row-tol split-gap col-gap line-height
+                   rows current-item current-y found split-rows current-row last-item-x current-item-x
+                   anchor-x anchor-y col-widths col-index row row-index sort-keys row-map token sorted-rows
+                   doc undo-started)
+
+      (vl-load-com)
+      (setq doc          (vla-get-ActiveDocument (vlax-get-acad-object))
+            undo-started nil)
+
+      (defun *error* (msg)
+        (if undo-started
+          (vla-EndUndoMark doc)
+        )
+        (if (not (member msg '("Function cancelled" "quit / exit abort")))
+          (princ (strcat "\n[GTY] Error: " msg))
+        )
+        (sssetfirst nil nil)
+        (princ)
+      )
+
+      (setq ss (ssget "_I" '((0 . "TEXT"))))
+      (if (not ss)
+        (progn
+          (prompt "\n[GTY] Select cable text to organize: ")
+          (setq ss (ssget '((0 . "TEXT"))))
+        )
+      )
+
+      (if ss
+        (progn
+          (vla-StartUndoMark doc)
+          (setq undo-started T
+                text-data     '()
+                total-height  0.0
+                i             0)
+
+          (repeat (sslength ss)
+            (setq ent             (ssname ss i)
+                  ent-data        (entget ent)
+                  text-string     (cdr (assoc 1 ent-data))
+                  insertion-point (cdr (assoc 10 ent-data))
+                  text-height     (cond ((cdr (assoc 40 ent-data))) (3.0))
+                  text-width      (aa:gty-get-text-width ent-data)
+                  text-data       (cons (list ent text-string insertion-point text-width text-height) text-data)
+                  total-height    (+ total-height text-height)
+                  i               (1+ i))
+          )
+          (setq text-data (reverse text-data))
+
+          (setq avg-height  (/ total-height (max 1 (length text-data)))
+                row-tol     (max 1.0 (* avg-height 0.6))
+                split-gap   200.0
+                col-gap     (max 10.0 (* avg-height 2.0))
+                line-height (max (* avg-height 1.6) (+ avg-height 1.0)))
+
+          (setq rows '())
+          (foreach current-item text-data
+            (setq current-y (aa:gty-get-item-y current-item)
+                  found     nil)
+            (setq rows
+              (mapcar
+                '(lambda (line)
+                   (if (and (not found)
+                            (<= (abs (- current-y (aa:gty-get-item-y (car line)))) row-tol))
+                     (progn
+                       (setq found T)
+                       (cons current-item line))
+                     line))
+                rows))
+            (if (not found)
+              (setq rows (cons (list current-item) rows))
+            )
+          )
+
+          (setq rows
+            (mapcar
+              '(lambda (line)
+                 (vl-sort line '(lambda (a b) (< (aa:gty-get-item-x a) (aa:gty-get-item-x b)))))
+              rows))
+
+          (setq split-rows '())
+          (foreach row rows
+            (if row
+              (progn
+                (setq current-row (list (car row))
+                      last-item-x (aa:gty-get-item-x (car row)))
+                (foreach current-item (cdr row)
+                  (setq current-item-x (aa:gty-get-item-x current-item))
+                  (if (> (- current-item-x last-item-x) split-gap)
+                    (progn
+                      (setq split-rows (cons current-row split-rows))
+                      (setq current-row (list current-item)))
+                    (setq current-row (append current-row (list current-item)))
+                  )
+                  (setq last-item-x current-item-x)
+                )
+                (setq split-rows (cons current-row split-rows))
+              )
+            )
+          )
+          (setq rows (reverse split-rows))
+
+          (setq rows
+            (vl-sort
+              rows
+              '(lambda (a b / ay by ax bx)
+                 (setq ay (aa:gty-get-item-y (car a))
+                       by (aa:gty-get-item-y (car b))
+                       ax (aa:gty-get-item-x (car a))
+                       bx (aa:gty-get-item-x (car b)))
+                 (if (> (abs (- ay by)) row-tol)
+                   (> ay by)
+                   (< ax bx)))))
+
+          (setq anchor-x (aa:gty-get-item-x (car text-data))
+                anchor-y (aa:gty-get-item-y (car text-data)))
+          (foreach current-item text-data
+            (if (< (aa:gty-get-item-x current-item) anchor-x)
+              (setq anchor-x (aa:gty-get-item-x current-item))
+            )
+            (if (> (aa:gty-get-item-y current-item) anchor-y)
+              (setq anchor-y (aa:gty-get-item-y current-item))
+            )
+          )
+
+          (setq col-widths '())
+          (foreach row rows
+            (setq col-index 0)
+            (foreach current-item row
+              (if (>= col-index (length col-widths))
+                (setq col-widths
+                  (append col-widths (list (max (aa:gty-get-item-width current-item) col-gap))))
+                (if (> (aa:gty-get-item-width current-item) (nth col-index col-widths))
+                  (setq col-widths
+                    (aa:gty-update-nth col-index (aa:gty-get-item-width current-item) col-widths))
+                )
+              )
+              (setq col-index (1+ col-index))
+            )
+          )
+
+          (setq sort-keys '()
+                row-map   '()
+                row-index 0)
+          (foreach row rows
+            (setq token     (aa:gty-build-sort-key row row-index)
+                  sort-keys (cons token sort-keys)
+                  row-map   (cons (cons token row) row-map)
+                  row-index (1+ row-index))
+          )
+          (setq sorted-rows
+            (mapcar
+              '(lambda (key) (cdr (assoc key row-map)))
+              (acad_strlsort sort-keys)))
+
+          (setq row-index 0)
+          (foreach row sorted-rows
+            (setq current-item-x anchor-x
+                  col-index      0)
+            (foreach current-item row
+              (aa:gty-move-entity
+                (aa:gty-get-item-ename current-item)
+                (aa:gty-get-item-pt current-item)
+                (list current-item-x
+                      (- anchor-y (* row-index line-height))
+                      (aa:gty-get-item-z current-item)))
+              (setq current-item-x (+ current-item-x (nth col-index col-widths) col-gap)
+                    col-index      (1+ col-index))
+            )
+            (setq row-index (1+ row-index))
+          )
+
+          (vla-EndUndoMark doc)
+          (setq undo-started nil)
+          (princ "\n[GTY] Cable text organized.")
+        )
+        (princ "\n[GTY] No text selected.")
+      )
+      (sssetfirst nil nil)
+      (princ)
+    )
+
+    (setq *ys-module-text_tools-loaded* T)
+    (princ "\n[YS-Tools] text-tools.lsp loaded.")
   )
 )
-
-(ysmod:load-aa)
-(princ "\n[YS-Tools] text-tools loaded from AA整合版本.lsp. Commands: CONT, TXT, T, YSDL, HEI, QSTXT, HE, QW, WI, GTX, GTY.")
 (princ)

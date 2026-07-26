@@ -1,4 +1,4 @@
-;;; YS-Tools configuration
+;;; YS-Tools v1.5.0 configuration
 ;;; Encoding: GBK/ANSI, CRLF
 
 ;;; --- YSDL 命令相关参数 ---

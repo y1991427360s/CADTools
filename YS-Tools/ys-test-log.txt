@@ -1,4 +1,0 @@
-TEST START
-DWGPREFIX: E:\366256\vibecoding\CADTools\YS-Tools\
-ACADVER: 20.0
-Find test file: C:\Users\ys199\AppData\Roaming\ZWSoft\ZWCAD\2026\zh-CN\Support\YS-Tools\test-simple.lsp
